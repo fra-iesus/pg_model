@@ -32,7 +32,7 @@ $config = array (
 $USER = new Schema\Users_Table($config, array( 'id' => 1 ));
 print_r($USER->to_hash());
 ```
-Output will looks like:
+Output will look like:
 ```
 Array (
       [id] => 1
