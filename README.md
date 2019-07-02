@@ -63,11 +63,18 @@ Array (
 Object `schema_some_table_reference` was created automatically by autoloader from foreign key on `reference` column pointing to `schema.some_table` table and `id` column.
 
 ```php
+# different getter/setter syntaxes are supported:
 $USER->name('New Name');
+$USER->name = 'New Name';
+$USER('name', 'New Name');
+
 $USER->save();
+
 # explicitly autoload class excluded from implicit autoloading
 $some_table_row = new Schema\Some_Table($config)->get_list( array ('limit' => 1) )->list[0];
-$some_table_row->autoload('modified_by');
+$autoloaded_class = $some_table_row->autoload('modified_by');
+# at this point that autoloaded class is also accessible via $some_table_row->schema_users_table_modified_by
 ```
+
 # TODO:
 - add column value validation based on its definition
