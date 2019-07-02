@@ -2,6 +2,23 @@
 PHP object model/listing autoloaded from PostgreSQL database supporting referencies (foreign keys)
 
 # Example:
+Let's have two db tables:
+```
+schema.users_table
+id          | int       | primary key
+name        | varchar
+created     | timestamp
+modified_by | int
+modified    | timestamp
+reference   | int       | foreign key schema.some_table (id)
+
+schema.some_table
+id          | int       | primary key
+modified_by | int       |
+modified    | timestamp | foreign key schema.users_table (id)
+value       | varchar
+```
+
 ```php
 require_once('./lib/pg_model.php');
 $db_conn = pg_connect('host','username','password','database');
@@ -48,9 +65,6 @@ Array (
       [created] => 2001-01-01 00:00:00+01
       [modified_by] => 1
       [modified] => 2019-04-19 01:02:03+01
-      [email] => some.username@example.com
-      [locale] => en_US
-      [timezone] => Europe/Prague
       [reference] => 1
       [schema_some_table_reference] => Array (
             [id] => 1
