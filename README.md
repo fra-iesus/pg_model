@@ -14,8 +14,8 @@ reference   | int       | foreign key schema.some_table (id)
 
 schema.some_table
 id          | int       | primary key
-modified_by | int       |
-modified    | timestamp | foreign key schema.users_table (id)
+modified_by | int       | foreign key schema.users_table (id)
+modified    | timestamp
 value       | varchar
 ```
 
