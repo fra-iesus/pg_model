@@ -9,7 +9,7 @@ $db_conn = pg_connect('host','username','password','database');
 $config = array (
 	# mandatory - db connection
 	'db' => &$db_conn,
-	# oprtional advanced options for classes
+	# optional advanced options for classes
 	'classes' => array (
 		# explicitly defined autoloaders not using foreign keys
 		# (for some reason like circular referencies or so)
