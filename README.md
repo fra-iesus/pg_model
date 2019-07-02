@@ -7,8 +7,12 @@ require_once('./lib/pg_model.php');
 $db_conn = pg_connect('host','username','password','database');
 
 $config = array (
+	# mandatory - db connection
 	'db' => &$db_conn,
+	# oprtional advanced options for classes
 	'classes' => array (
+		# explicitly defined autoloaders not using foreign keys
+		# (for some reason like circular referencies or so)
 		'autoloaders'  => array (
 			'modified_by' => array (
 				'class' => 'schema.users_table',
@@ -16,10 +20,13 @@ $config = array (
 					'id' => 'modified_by'
 				),
 				'exclude' => array (
+					# do not autoload here to avoid circular reference
 					'schema.some_table'
 				)
 			)
 		),
+		# values which should be set while saving the row to the database
+		# (scalar value or function could be used)
 		'defaults' => array (
 			'modified' => 'NOW()',
 			'modified_by'  => function () use (&$USER) {
@@ -29,6 +36,7 @@ $config = array (
 	)
 );
 
+# load a row from the database
 $USER = new Schema\Users_Table($config, array( 'id' => 1 ));
 print_r($USER->to_hash());
 ```
@@ -43,6 +51,7 @@ Array (
       [email] => some.username@example.com
       [locale] => en_US
       [timezone] => Europe/Prague
+      [reference] => 1
       [schema_some_table_reference] => Array (
             [id] => 1
             [modified_by] => 1
@@ -51,6 +60,8 @@ Array (
       )
 )
 ```
+Object `schema_some_table_reference` was created automatically by autoloader from foreign key on `reference` column pointing to `schema.some_table` table and `id` column.
+
 ```php
 $USER->name('New Name');
 $USER->save();
