@@ -133,7 +133,7 @@ class PgListing {
 
 	protected function prepare_query() {
 		$query = $this->definition['query'];
-		# TODO: chytrejsi logika na nahrazeni pouze na spravnem miste u slozitych dotazu s pre-selecty
+		# TODO: smarter logic to replace only on the correct place for queries with pre-selects
 		if (!$query) {
 			$query = 'SELECT * FROM ' . $this->definition['class'] . ' ';
 			$query_suffix = '';
