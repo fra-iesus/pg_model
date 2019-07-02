@@ -31,6 +31,27 @@ $config = array (
 
 $USER = new Schema\Users_Table($config, array( 'id' => 1 ));
 print_r($USER->to_hash());
+```
+Output will looks like:
+```
+Array (
+      [id] => 1
+      [name] => some username
+      [created] => 2001-01-01 00:00:00+01
+      [modified_by] => 1
+      [modified] => 2019-04-19 01:02:03+01
+      [email] => some.username@example.com
+      [locale] => en_US
+      [timezone] => Europe/Prague
+      [schema_some_table_reference] => Array (
+            [id] => 1
+            [modified_by] => 1
+            [modified] => 2019-04-19 01:02:03+01
+            [value] => some value
+      )
+)
+```
+```php
 $USER->name('New Name');
 $USER->save();
 # explicitly autoload class excluded from implicit autoloading
