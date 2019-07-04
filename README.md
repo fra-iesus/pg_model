@@ -88,6 +88,19 @@ $USER->save();
 $some_table_row = new Schema\Some_Table($config)->get_list( array ('limit' => 1) )->list[0];
 $autoloaded_class = $some_table_row->autoload('modified_by');
 # at this point that autoloaded class is also accessible via $some_table_row->schema_users_table_modified_by
+
+# filters = search query
+$autoloaded_class->get_list( [
+	'limit' => 1,
+	'filters' => [
+		'reference' => 1,
+		'name' => [
+			'condition' => 'ilike',
+			'value' => 'T%'
+		]
+	]
+] );
+
 ```
 
 # TODO:
