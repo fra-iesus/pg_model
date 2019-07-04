@@ -343,9 +343,9 @@ class PgModel {
 					$this->definition['columns'][$key]['saved'] = true;
 					$this->definition['columns'][$key]['loaded'] = true;
 				}
+				$this->_changed = false;
+				$this->_loaded = true;
 			}
-			$this->_changed = false;
-			$this->_loaded = true;
 		}
 		return true;
 	}
