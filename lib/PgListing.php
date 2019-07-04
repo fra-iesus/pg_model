@@ -84,8 +84,7 @@ class PgListing {
 
 	function load() {
 		if ($res = pg_query($this->c['db'],$this->prepare_query())) {
-			$res_cnt = pg_num_rows($res);
-			$this->_count = $res_cnt;
+			$this->_count = 0;
 			$class;
 			$this->list = array ();
 			if (isset($this->definition['class']) && ($this->definition['class'] != '')) {
@@ -99,6 +98,7 @@ class PgListing {
 				$value->parse_params($values);
 				$value->promise_is_loaded();
 				array_push($this->list, $value);
+				$this->_count++;
 			}
 			return ($this->_loaded = true);
 		}
