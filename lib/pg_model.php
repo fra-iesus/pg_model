@@ -16,7 +16,7 @@ function class_autoload ($class) {
 		if (sizeof($parts) > 2 && $parts[2] == 'Listing') {
 			$eval = 'namespace ' . $parts[0] . '\\' . $parts[1] . ';
 			class ' . $parts[2] . ' extends \PgListing {
-				function __construct(&$c, $params) {
+				function __construct(&$c, $params = []) {
 					$params["class"] = "' . $parts[0] . '.' . $parts[1] . '";
 					parent::__construct($c, $params);
 				}
