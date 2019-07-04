@@ -133,7 +133,7 @@ class PgListing {
 
 	protected function prepare_query() {
 		$query = $this->definition['query'];
-		# TODO: smarter logic to replace only on the correct place for queries with pre-selects
+		# TODO: chytrejsi logika na nahrazeni pouze na spravnem miste u slozitych dotazu s pre-selecty
 		if (!$query) {
 			$query = 'SELECT * FROM ' . $this->definition['class'] . ' ';
 			$query_suffix = '';
@@ -145,7 +145,7 @@ class PgListing {
 					}
 					$value = $value['value'];
 				}
-				$query_suffix .= ' AND ' . $key . ' ' . $condition . (isset($value) ? ' "' . pg_escape_string($this->c['db'],$value) . '"' : '' ) . '';
+				$query_suffix .= ($query_suffix ? ' AND ' : ' WHERE ') . $key . ' ' . $condition . (isset($value) ? " '" . pg_escape_string($this->c['db'],$value) . "'" : '' ) . '';
 			}
 
 			$ord = false;
