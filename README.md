@@ -90,7 +90,7 @@ $autoloaded_class = $some_table_row->autoload('modified_by');
 # at this point that autoloaded class is also accessible via $some_table_row->schema_users_table_modified_by
 
 # filters = search query
-$autoloaded_class->get_list( [
+$list = new Schema\Users_Table\Listing($config, [
 	'limit' => 1,
 	'filters' => [
 		'reference' => 1,
