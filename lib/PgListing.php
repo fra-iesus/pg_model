@@ -21,7 +21,7 @@ class PgListing {
 	protected $_count  = null; 
 	protected $c       = null;
 
-	function __construct(&$config, $params) {
+	function __construct(&$config, $params = []) {
 		$this->c = &$config;
 		if ($params['offset']) {
 			$this->offset = $params['offset'];
