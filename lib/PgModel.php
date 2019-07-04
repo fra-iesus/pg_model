@@ -461,7 +461,7 @@ class PgModel {
 			WHERE c.table_schema = '{$schema}' AND c.table_name = '{$table}'
 			ORDER BY c.ordinal_position
 		";
-		if ( $res = pg_query($this->c['db'], $query) ) {
+		if ( ($res = pg_query($this->c['db'], $query)) && pg_num_rows($res) ) {
 			$this->definition['columns'] = array ();
 			$this->definition['keys'] = array ();
 			$this->definition['autoloaders'] = array ();
@@ -524,6 +524,8 @@ class PgModel {
 			}
 			$this->c['classes']['definitions'][$this->get_class()] = $this->definition;
 			return true;
+		} else {
+			error_log("ERROR: unable to init class ${$this->get_class()}!");
 		}
 		return false;
 	}
