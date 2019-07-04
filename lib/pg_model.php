@@ -13,12 +13,23 @@ function class_autoload ($class) {
 		}
 		$parts = explode('\\', $class);
 
-		$eval = 'namespace ' . $parts[0] . ';
-		class ' . $parts[1] . ' extends \PgModel {
-			function __construct(&$c, $values = null) {
-				parent::__construct($c, "' . str_replace('\\', '.', $class) . '", $values);
-			}
-		}';
+		if (sizeof($parts) > 2 && $parts[2] == 'Listing') {
+			$eval = 'namespace ' . $parts[0] . '\\' . $parts[1] . ';
+			class ' . $parts[2] . ' extends \PgListing {
+				function __construct(&$c, $offset = null, $limit = null, $current = null, $filters = null) {
+					parent::__construct($c, $offset, $limit, $current, $filters);
+					$this->set_class("' . $parts[0] . '.' . $parts[1] . '");
+					$this->load();
+				}
+			}';
+		} else {
+			$eval = 'namespace ' . $parts[0] . ';
+			class ' . $parts[1] . ' extends \PgModel {
+				function __construct(&$c, $values = null) {
+					parent::__construct($c, "' . str_replace('\\', '.', $class) . '", $values);
+				}
+			}';
+		}
 		eval($eval);
 		return true;
 	} else {
