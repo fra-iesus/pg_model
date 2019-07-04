@@ -433,6 +433,12 @@ class PgModel {
 			die(error_log("ERROR: database connection for class ${$this->get_class()} not defined!"));
 		}
 
+		if (!$this->c) {
+			$this->c = [];
+		}
+		if (!array_key_exists('classes', $this->c)) {
+			$this->c['classes'] = array ();
+		}
 		if (!array_key_exists('definitions', $this->c['classes'])) {
 			$this->c['classes']['definitions'] = array ();
 		}
