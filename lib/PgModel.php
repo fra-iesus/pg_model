@@ -227,12 +227,8 @@ class PgModel {
 		if (!array_key_exists('filters', $params)) {
 			$params['filters'] = null;
 		}
-		$listing = new PgListing($this->c, $params['offset'], $params['limit'], $params['current'], $params['filters']);
-		$listing->set_class($this->get_class());
-		if (array_key_exists('ordering', $params)) {
-			$listing->order_by($params['ordering']);
-		}
-		$listing->load();
+		$params['class'] = $this->get_class();
+		$listing = new PgListing($this->c, $params);
 		return $listing;
 	}
 
