@@ -427,10 +427,10 @@ class PgModel {
 
 	protected function init_struct() {
 		if (!$this->c) {
-			die(error_log("ERROR: config for class ${$this->get_class()} not defined!"));
+			die(error_log("ERROR: config for class {$this->get_class()} not defined!"));
 		}
 		if (!$this->c['db']) {
-			die(error_log("ERROR: database connection for class ${$this->get_class()} not defined!"));
+			die(error_log("ERROR: database connection for class {$this->get_class()} not defined!"));
 		}
 		if (!array_key_exists('classes', $this->c)) {
 			$this->c['classes'] = array ();
@@ -521,7 +521,7 @@ class PgModel {
 			$this->c['classes']['definitions'][$this->get_class()] = $this->definition;
 			return true;
 		} else {
-			error_log("ERROR: unable to init class ${$this->get_class()}!");
+			error_log("ERROR: unable to init class {$this->get_class()}!");
 		}
 		return false;
 	}
