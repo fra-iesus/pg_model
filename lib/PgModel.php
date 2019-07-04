@@ -172,7 +172,7 @@ class PgModel {
 	}
 
 	function autoload($autoloader) {
-		if (array_key_exists($autoloader, $this->c['classes']['autoloaders']) && array_key_exists($autoloader, $this->definition['columns'])) {
+		if (is_array($this->c['classes']['autoloaders']) && array_key_exists($autoloader, $this->c['classes']['autoloaders']) && array_key_exists($autoloader, $this->definition['columns'])) {
 			$value = $this->c['classes']['autoloaders'][$autoloader];
 			$this->definition['autoloaders'][str_replace('.', '_', $value['class']) . '_' . $autoloader] = $value;
 			return $this->__get(str_replace('.', '_', $value['class']) . '_' . $autoloader);
@@ -461,7 +461,7 @@ class PgModel {
 			WHERE c.table_schema = '{$schema}' AND c.table_name = '{$table}'
 			ORDER BY c.ordinal_position
 		";
-		if ( ($res = pg_query($this->c['db'], $query)) && pg_num_rows($res) ) {
+		if ( $res = pg_query($this->c['db'], $query) ) {
 			$this->definition['columns'] = array ();
 			$this->definition['keys'] = array ();
 			$this->definition['autoloaders'] = array ();
@@ -515,9 +515,11 @@ class PgModel {
 					}
 				}
 			}
-			foreach ($this->c['classes']['autoloaders'] as $key => $value) {
-				if ($value['class'] != $this->get_class() && array_search($this->get_class(), $value['exclude']) === false && array_key_exists($key, $this->definition['columns'])) {
-					$this->definition['autoloaders'][str_replace('.', '_', $value['class']) . '_' . $key] = $value;
+			if (is_array($this->c['classes']['autoloaders'])) {
+				foreach ($this->c['classes']['autoloaders'] as $key => $value) {
+					if ($value['class'] != $this->get_class() && array_search($this->get_class(), $value['exclude']) === false && array_key_exists($key, $this->definition['columns'])) {
+						$this->definition['autoloaders'][str_replace('.', '_', $value['class']) . '_' . $key] = $value;
+					}
 				}
 			}
 			$this->c['classes']['definitions'][$this->get_class()] = $this->definition;
