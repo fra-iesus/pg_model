@@ -21,13 +21,25 @@ class PgListing {
 	protected $_count  = null; 
 	protected $c       = null;
 
-	function __construct(&$config, $offset = null, $limit = null, $current = null, $filters = null) {
+	function __construct(&$config, $params) {
 		$this->c = &$config;
-		$this->offset = $offset;
-		$this->limit  = $limit;
-		$this->current['keys'] = $current;
-		if ($filters) {
-			$this->filter($filters);
+		if ($params['offset']) {
+			$this->offset = $params['offset'];
+		}
+		if ($params['limit']) {
+			$this->limit  = $params['limit'];
+		}
+		if ($params['current']) {
+			$this->current['keys'] = $params['current'];
+		}
+		if ($params['filters']) {
+			$this->filter($params['filters']);
+		}
+		if ($params['class']) {
+			$this->set_class($params['class']);
+		}
+		if ($params['ordering']) {
+			$this->order_by($params['ordering']);
 		}
 		if ( ($this->definition['query'] || $this->definition['class']) && ($this->definition['autoload']) ) {
 			$this->load();
