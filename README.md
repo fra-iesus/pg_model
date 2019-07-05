@@ -105,3 +105,4 @@ $list = new Schema\Users_Table\Listing($config, [
 
 # TODO:
 - add column value validation based on its definition
+- method for search and recursive removal of references to allow row deletion in case of foreign keys
