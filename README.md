@@ -21,7 +21,7 @@ value       | varchar
 
 ```php
 require_once('./lib/pg_model.php');
-$db_conn = pg_connect('host','username','password','database');
+$db_conn = pg_connect('host=localhost port=5432 dbname=some_db user=me ...');
 
 $config = array (
 	# mandatory - db connection
