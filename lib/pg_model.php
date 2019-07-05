@@ -4,15 +4,15 @@ function class_autoload ($class) {
 	if (class_exists($class)) {
 		return true;
 	}
-	if (is_file(__DIR__ . "/" . $class . ".php")) {
-		include(__DIR__ . "/" . $class . ".php");
+	$parts = explode('\\', $class);
+	$file = __DIR__ . DIRECTORY_SEPARATOR . join(DIRECTORY_SEPARATOR, $parts) . '.php';
+	if (is_file($file)) {
+		include($file);
 		return true;
-	} else if ( preg_match('/\\\\/', $class) ) {
+	} else if ( sizeof($parts) > 1 ) {
 		if (!class_exists('PgModel')) {
 			include(__DIR__ . "/PgModel.php");
 		}
-		$parts = explode('\\', $class);
-
 		if (sizeof($parts) > 2 && $parts[2] == 'Listing') {
 			$eval = 'namespace ' . $parts[0] . '\\' . $parts[1] . ';
 			class ' . $parts[2] . ' extends \PgListing {
