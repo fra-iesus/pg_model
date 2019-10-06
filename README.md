@@ -1,6 +1,8 @@
 # pg_model
 PHP object model/listing autoloaded from PostgreSQL database supporting referencies (foreign keys)
 
+https://github.com/fra-iesus/pg_model
+
 # Example:
 Let's have two db tables:
 ```
