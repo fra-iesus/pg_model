@@ -145,7 +145,7 @@ class PgListing {
 
 	protected function prepare_query() {
 		$query = $this->definition['query'];
-		# TODO: chytrejsi logika na nahrazeni pouze na spravnem miste u slozitych dotazu s pre-selecty
+		# TODO: smarter logic to be able to handle more complex queries with preselects
 		if (!$query) {
 			$query = 'SELECT * FROM ' . $this->definition['class'] . ' ';
 			$query_suffix = '';
@@ -156,6 +156,9 @@ class PgListing {
 						$condition = $value['condition'];
 					}
 					$value = $value['value'];
+				}
+				if (!isset($value)) {
+					$condition = 'IS NULL';
 				}
 				$query_suffix .= ($query_suffix ? ' AND ' : ' WHERE ') . $key . ' ' . $condition . (isset($value) ? " '" . pg_escape_string($this->c['db'],$value) . "'" : '' ) . '';
 			}
