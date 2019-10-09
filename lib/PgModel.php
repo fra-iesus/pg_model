@@ -125,7 +125,7 @@ class PgModel {
 		$query = "DELETE FROM {$this->get_class()} WHERE ";
 		$vals = array();
 		foreach ($this->definition['keys'] as $key => $value) {
-			$vals[] = $key . ' = ' . $this->prepare_value($key);
+			$vals[] = $key . ' = ' . $this->prepare_value($key, true);
 		}
 		$query .= implode(' AND ', $vals);
 		if (!pg_query($this->c['db'],$query)) {
@@ -206,16 +206,20 @@ class PgModel {
 	}
 
 	function parse_params($params) {
-		foreach ( $this->definition['columns'] as $key => $val ) {
-			if (isset($params[$key])) {
-				$this->$key = $params[$key];
+		foreach ( $this->definition['columns'] as $column => $val ) {
+			if (isset($params[$column])) {
+				$this->$column = $params[$column];
 			} else {
-				$this->$key = '';
+				$this->$column = '';
 			}
 		}
 	}
 
 	function promise_is_loaded() {
+		foreach ( $this->definition['columns'] as $column => $val ) {
+			$this->definition['columns'][$column]['saved'] = true;
+			$this->definition['columns'][$column]['loaded'] = true;
+		}
 		return $this->_loaded = true;
 	}
 
@@ -377,14 +381,14 @@ class PgModel {
 
 	protected function prepare_value($column, $old_value = false) {
 		$value = null;
-		if ($this->c['classes']['defaults'][$column] && $this->definition['columns'][$key]['saved']) {
-			if (is_callable($this->c['classes']['defaults'][$column])) {
-				return $this->c['classes']['defaults'][$column]();
+		if ($this->c['classes']['autoupdate'][$column] && $this->definition['columns'][$key]['saved']) {
+			if (is_callable($this->c['classes']['autoupdate'][$column])) {
+				return $this->c['classes']['autoupdate'][$column]();
 			}
-			return $this->c['classes']['defaults'][$column];
+			return $this->c['classes']['autoupdate'][$column];
 		}
-		if (null !== ($old_value ? $this->old_values[$column] : $this->values[$column])) {
-			$value = $old_value ? $this->old_values[$column] : $this->values[$column];
+		if (null !== ($old_value && !$this->definition['columns'][$column]['saved'] ? $this->old_values[$column] : $this->values[$column])) {
+			$value = $old_value && !$this->definition['columns'][$column]['saved'] ? $this->old_values[$column] : $this->values[$column];
 			switch ($this->definition['columns'][$column]['type']) {
 				case 'int2':
 				case 'int4':
@@ -414,19 +418,19 @@ class PgModel {
 
 	protected function keys_values($old = false) {
 		$values = array();
-		foreach ($this->definition['keys'] as $key => $value) {
-			array_push($values, $this->prepare_value($key, $old));
+		foreach ($this->definition['keys'] as $column => $value) {
+			array_push($values, $this->prepare_value($column, $old));
 		}
 		return $values;
 	}
 
 	protected function all_values() {
 		$values = array();
-		foreach ($this->columns() as $key => $value) {
-			if (!isset($this->values[$key]) && $this->definition['columns'][$key]['required']) {
-				# die("Missing required value for column $key in table ".$this->definition['table']);
+		foreach ($this->columns() as $column) {
+			if (!isset($this->values[$column]) && $this->definition['columns'][$column]['required']) {
+				# die("Missing required value for column $column in table ".$this->definition['table']);
 			} else {
-				array_push($values, $this->prepare_value($key));
+				array_push($values, $this->prepare_value($column));
 			}
 		}
 		return $values;

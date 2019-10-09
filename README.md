@@ -45,8 +45,9 @@ $config = array (
 			)
 		),
 		# values which should be set while saving the row to the database
+		# unless they were explicitly updated
 		# (scalar value or function could be used)
-		'defaults' => array (
+		'autoupdate' => array (
 			'modified' => 'NOW()',
 			'modified_by'  => function () use (&$USER) {
 				return "'" . $USER->id . "'";
