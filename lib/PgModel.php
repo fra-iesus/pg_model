@@ -16,7 +16,6 @@ class PgModel {
 	private $_loaded        = false;
 	private $_changed       = false;
 	private $c              = null;
-	private $class_name     = __CLASS__;
 
 	function __construct(&$config, $values = null) {
 		$this->c = &$config;
