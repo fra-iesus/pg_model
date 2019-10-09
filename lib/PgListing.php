@@ -69,18 +69,18 @@ class PgListing {
 
 	function filter($filters = null) {
 		if (is_array($filters)) {
-			$this->definition[filters] = $filters;
+			$this->definition['filters'] = $filters;
 		} else {
-			$this->definition[filters] = array ();
+			$this->definition['filters'] = array ();
 		}
 		return $this;
 	}
 
 	function columns($columns = null) {
 		if (is_array($columns)) {
-			$this->definition[columns] = $columns;
+			$this->definition['columns'] = $columns;
 		} else {
-			$this->definition[columns] = array ();
+			$this->definition['columns'] = array ();
 		}
 		return $this;
 	}
@@ -103,8 +103,8 @@ class PgListing {
 				$class = $this->definition['class'];
 			}
 			while ($values = pg_fetch_assoc($res)) {
-				if (is_array($this->current[keys]) && !sizeof(array_diff($values, $this->current[keys]))) {
-					$this->current[index] = sizeof($this->list);
+				if (is_array($this->current['keys']) && !sizeof(array_diff($values, $this->current['keys']))) {
+					$this->current['index'] = sizeof($this->list);
 				}
 				$value = new PgModel($this->c, $class);
 				$value->parse_params($values);
