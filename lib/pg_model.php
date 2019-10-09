@@ -1,11 +1,13 @@
 <?php
 
 function class_autoload ($class) {
-	if (class_exists($class)) {
+	global $AUTOLOAD_DIR;
+	$dir = $AUTOLOAD_DIR ? $AUTOLOAD_DIR : __DIR__;
+	if (class_exists($class, false)) {
 		return true;
 	}
 	$parts = explode('\\', $class);
-	$file = __DIR__ . DIRECTORY_SEPARATOR . join(DIRECTORY_SEPARATOR, $parts) . '.php';
+	$file = $dir . DIRECTORY_SEPARATOR . join(DIRECTORY_SEPARATOR, $parts) . '.php';
 	if (is_file($file)) {
 		include($file);
 		return true;
@@ -15,19 +17,10 @@ function class_autoload ($class) {
 		}
 		if (sizeof($parts) > 2 && $parts[2] == 'Listing') {
 			$eval = 'namespace ' . $parts[0] . '\\' . $parts[1] . ';
-			class ' . $parts[2] . ' extends \PgListing {
-				function __construct(&$c, $params = []) {
-					$params["class"] = "' . $parts[0] . '.' . $parts[1] . '";
-					parent::__construct($c, $params);
-				}
-			}';
+			class ' . $parts[2] . ' extends \PgListing {}';
 		} else {
 			$eval = 'namespace ' . $parts[0] . ';
-			class ' . $parts[1] . ' extends \PgModel {
-				function __construct(&$c, $values = null) {
-					parent::__construct($c, "' . str_replace('\\', '.', $class) . '", $values);
-				}
-			}';
+			class ' . $parts[1] . ' extends \PgModel {}';
 		}
 		eval($eval);
 		return true;

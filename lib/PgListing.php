@@ -3,6 +3,7 @@ class PgListing {
 	var $definition = array (
 		'query'    => '',
 		'class'    => '',
+		'pg_class' => '',
 		'columns'  => array (),
 		'filters'  => array (), # key => value
 		'ordering' => array (), # key => how
@@ -23,6 +24,13 @@ class PgListing {
 
 	function __construct(&$config, $params = []) {
 		$this->c = &$config;
+
+		$class = get_called_class();
+		$class = str_replace('\\Listing', '', $class);
+		$this->definition['pg_class'] = $class;
+		$class = strtolower(str_replace('\\', '.', $class));
+		$this->set_class($class);
+
 		if ($params['offset']) {
 			$this->offset = $params['offset'];
 		}
@@ -35,15 +43,13 @@ class PgListing {
 		if ($params['filters']) {
 			$this->filter($params['filters']);
 		}
-		if ($params['class']) {
-			$this->set_class($params['class']);
-		}
 		if ($params['ordering']) {
 			$this->order_by($params['ordering']);
 		}
 		if ( ($this->definition['query'] || $this->definition['class']) && ($this->definition['autoload']) ) {
 			$this->load();
 		}
+
 		return $this;
 	}
 
@@ -99,14 +105,14 @@ class PgListing {
 			$this->_count = 0;
 			$class;
 			$this->list = array ();
-			if (isset($this->definition['class']) && ($this->definition['class'] != '')) {
-				$class = $this->definition['class'];
+			if (isset($this->definition['pg_class']) && ($this->definition['pg_class'] != '')) {
+				$class = $this->definition['pg_class'];
 			}
 			while ($values = pg_fetch_assoc($res)) {
 				if (is_array($this->current['keys']) && !sizeof(array_diff($values, $this->current['keys']))) {
 					$this->current['index'] = sizeof($this->list);
 				}
-				$value = new PgModel($this->c, $class);
+				$value = new $class($this->c);
 				$value->parse_params($values);
 				$value->promise_is_loaded();
 				array_push($this->list, $value);

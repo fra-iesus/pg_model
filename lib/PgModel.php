@@ -1,4 +1,5 @@
 <?php
+
 class PgModel {
 	var $definition = array (
 		'schema'        => '',
@@ -11,13 +12,18 @@ class PgModel {
 	var $values     = array ();
 	var $old_values = array ();
 
-	protected $loaded_classes = array ();
-	protected $_loaded        = false;
-	protected $_changed       = false;
-	protected $c              = null;
+	private $loaded_classes = array ();
+	private $_loaded        = false;
+	private $_changed       = false;
+	private $c              = null;
+	private $class_name     = __CLASS__;
 
-	function __construct(&$config, $table_name, $values = null) {
+	function __construct(&$config, $values = null) {
 		$this->c = &$config;
+
+		$class = get_called_class();
+		$table_name = str_replace('\\', '.', $class);
+
 		$this->set_class($table_name);
 		$this->init_struct();
 
@@ -228,7 +234,8 @@ class PgModel {
 			$params['filters'] = null;
 		}
 		$params['class'] = $this->get_class();
-		$listing = new PgListing($this->c, $params);
+		$class = $this->definition['pg_class'];
+		$listing = new $class($this->c, $params);
 		return $listing;
 	}
 
@@ -277,7 +284,12 @@ class PgModel {
 			if (!array_key_exists($name, $this->loaded_classes)) {
 				$class = $this->definition['autoloaders'][$name];
 				$class_name = $class['class'];
-				$loaded_class = new PgModel($this->c, $class_name);
+				$parts = explode('.', $class_name);
+				foreach ($parts as $key => $value) {
+					$parts[$key] = ucfirst($value);
+				}
+				$class_name = join('\\', $parts);
+				$loaded_class = new $class_name($this->c);
 				$do_not_load = false;
 				foreach ($class['keys'] as $key => $value) {
 					$loaded_class->$key = $this->$value;
@@ -366,7 +378,7 @@ class PgModel {
 
 	protected function prepare_value($column, $old_value = false) {
 		$value = null;
-		if ($this->c['classes']['defaults'][$column]) {
+		if ($this->c['classes']['defaults'][$column] && $this->definition['columns'][$key]['saved']) {
 			if (is_callable($this->c['classes']['defaults'][$column])) {
 				return $this->c['classes']['defaults'][$column]();
 			}
@@ -384,7 +396,7 @@ class PgModel {
 					$value = "'".(float)$value."'";
 					break;
 				case 'bool':
-					$value = (bool)$value;
+					$value = (bool)$value ? 'true' : 'false';
 					break;
 				case 'bytea':
 					$value = pg_escape_bytea($this->c['db'], $value);
@@ -489,7 +501,10 @@ class PgModel {
 			if ( $res = pg_query($this->c['db'], $query) ) {
 				while ($row = pg_fetch_assoc($res)) {
 					if ( preg_match('/FOREIGN KEY \(([^\)]*)\) REFERENCES ([^\(]*)\(([^\)]*)\)/', $row['condef'], $foreign) ) {
+						$foreign[1] = str_replace('"', '', $foreign[1]);
+						$foreign[2] = str_replace('"', '', $foreign[2]);
 						$autoloader = str_replace('.', '_', $foreign[2]) . '_' . $foreign[1];
+
 						if ($this->c['classes']['autoloaders'][$foreign[1]]['exclude'] && array_search($this->get_class(), $this->c['classes']['autoloaders'][$foreign[1]]['exclude']) !== false) {
 							continue;
 						} else {
