@@ -251,9 +251,8 @@ class PgModel {
 			if ($this->values[$name] != $arguments[0]) {
 				$this->definition['columns'][$name]['saved'] = false;
 				$this->_changed = true;
-			} else {
-				return $this;
 			}
+			return $this->values[$name];
 		} else {
 			$this->definition['columns'][$name] = array (
 				'required'   => false,
@@ -269,7 +268,7 @@ class PgModel {
 		}
 		$this->old_values[$name] = $this->values[$name];
 		$this->values[$name] = $arguments[0];
-		return $this;
+		return $this->values[$name];
 	}
 
 	public function __get($name) {
