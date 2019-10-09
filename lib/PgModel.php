@@ -251,8 +251,9 @@ class PgModel {
 			if ($this->values[$name] != $arguments[0]) {
 				$this->definition['columns'][$name]['saved'] = false;
 				$this->_changed = true;
+			} else {
+				return $this->values[$name];
 			}
-			return $this->values[$name];
 		} else {
 			$this->definition['columns'][$name] = array (
 				'required'   => false,
