@@ -107,7 +107,7 @@ $list = new Schema\Users_Table\Listing($config, [
 	],
 	'counts' => [ 'schema.some_other_table' => 'id_user' ],
 ] );
-
+# count of records with the same 'id_user' is afterwards accessible in models by property named 'schema_some_other_table'
 ```
 
 # TODO:
