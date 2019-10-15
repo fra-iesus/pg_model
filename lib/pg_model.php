@@ -1,19 +1,29 @@
 <?php
 
 function class_autoload ($class) {
-	global $AUTOLOAD_DIR;
-	$dir = $AUTOLOAD_DIR ? $AUTOLOAD_DIR : __DIR__;
+	global $AUTOLOAD_DIRS;
 	if (class_exists($class, false)) {
 		return true;
 	}
+	$dirs = is_array($AUTOLOAD_DIRS) && sizeof($AUTOLOAD_DIRS) ? $AUTOLOAD_DIRS : [];
+	array_push($dirs, __DIR__);
 	$parts = explode('\\', $class);
-	$file = $dir . DIRECTORY_SEPARATOR . join(DIRECTORY_SEPARATOR, $parts) . '.php';
-	if (is_file($file)) {
-		include($file);
-		return true;
-	} else if ( sizeof($parts) > 1 ) {
+	foreach ($dirs as $dir) {
+		$path = $parts;
+		while (sizeof($path)) {
+			$file = $dir . DIRECTORY_SEPARATOR . join(DIRECTORY_SEPARATOR, $path) . '.php';
+			if (is_file($file)) {
+				require_once($file);
+				if (class_exists($class, false) || trait_exists($class, false) || interface_exists($class, false)) {
+					return true;
+				}
+			}
+			array_shift($path);
+		}
+	}
+	if ( sizeof($parts) > 1 ) {
 		if (!class_exists('PgModel')) {
-			include(__DIR__ . "/PgModel.php");
+			require_once(__DIR__ . "/PgModel.php");
 		}
 		if (sizeof($parts) > 2 && $parts[2] == 'Listing') {
 			$eval = 'namespace ' . $parts[0] . '\\' . $parts[1] . ';
@@ -24,10 +34,10 @@ function class_autoload ($class) {
 		}
 		eval($eval);
 		return true;
-	} else {
-		throw new Exception("Unable to load $class.");
 	}
+	#throw new Exception("Unable to load $class.");
+	return false;
 }
-spl_autoload_register("class_autoload");
+spl_autoload_register("class_autoload", true, false);
 
 ?>

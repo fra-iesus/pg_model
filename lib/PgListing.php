@@ -1,15 +1,16 @@
 <?php
 class PgListing {
-	var $definition = array (
+	var $definition = [
 		'query'    => '',
 		'class'    => '',
 		'pg_class' => '',
-		'columns'  => array (),
-		'filters'  => array (), # key => value
-		'ordering' => array (), # key => how
+		'columns'  => [],
+		'filters'  => [], # key => value
+		'ordering' => [], # key => how
+		'counts'   => [], # table => row
 		'autoload' => true,
-	);
-	var $list    = array ();
+	];
+	var $list    = [];
 	var $offset  = null;
 	var $limit   = null;
 	var $current = array(
@@ -23,13 +24,20 @@ class PgListing {
 	protected $c       = null;
 
 	function __construct(&$config, $params = []) {
-		$this->c = &$config;
-
 		$class = get_called_class();
 		$class = str_replace('\\Listing', '', $class);
 		$this->definition['pg_class'] = $class;
 		$class = strtolower(str_replace('\\', '.', $class));
 		$this->set_class($class);
+
+		if (!$config) {
+			throw new Exception("Config for class {$this->get_class()} not defined!");
+		}
+		if (!$config['db']) {
+			throw new Exception("Database connection for class {$this->get_class()} not defined!");
+		}
+		$this->c = &$config;
+
 
 		if ($params['offset']) {
 			$this->offset = $params['offset'];
@@ -46,6 +54,9 @@ class PgListing {
 		if ($params['ordering']) {
 			$this->order_by($params['ordering']);
 		}
+		if ($params['counts']) {
+			$this->set_counts($params['counts']);
+		}
 		if ( ($this->definition['query'] || $this->definition['class']) && ($this->definition['autoload']) ) {
 			$this->load();
 		}
@@ -59,9 +70,9 @@ class PgListing {
 		}
 		$this->definition['filters'][$name] = $value;
 		if (!array_key_exists($name, $this->definition['columns'])) {
-			$this->definition['columns'][$name] = array (
+			$this->definition['columns'][$name] = [
 				'type' => 'varchar',
-			);
+			];
 		}
 	}
 
@@ -77,7 +88,7 @@ class PgListing {
 		if (is_array($filters)) {
 			$this->definition['filters'] = $filters;
 		} else {
-			$this->definition['filters'] = array ();
+			$this->definition['filters'] = [];
 		}
 		return $this;
 	}
@@ -86,7 +97,7 @@ class PgListing {
 		if (is_array($columns)) {
 			$this->definition['columns'] = $columns;
 		} else {
-			$this->definition['columns'] = array ();
+			$this->definition['columns'] = [];
 		}
 		return $this;
 	}
@@ -95,7 +106,16 @@ class PgListing {
 		if (is_array($ordering)) {
 			$this->definition['ordering'] = $ordering;
 		} else {
-			$this->definition['ordering'] = array ();
+			$this->definition['ordering'] = [];
+		}
+		return $this;
+	}
+
+	function set_counts($counts = null) {
+		if (is_array($counts)) {
+			$this->definition['counts'] = $counts;
+		} else {
+			$this->definition['counts'] = [];
 		}
 		return $this;
 	}
@@ -104,15 +124,19 @@ class PgListing {
 		if ($res = pg_query($this->c['db'],$this->prepare_query())) {
 			$this->_count = 0;
 			$class;
-			$this->list = array ();
+			$this->list = [];
 			if (isset($this->definition['pg_class']) && ($this->definition['pg_class'] != '')) {
-				$class = $this->definition['pg_class'];
+				$class = '\\' . $this->definition['pg_class'];
 			}
 			while ($values = pg_fetch_assoc($res)) {
 				if (is_array($this->current['keys']) && !sizeof(array_diff($values, $this->current['keys']))) {
 					$this->current['index'] = sizeof($this->list);
 				}
 				$value = new $class($this->c);
+				foreach ($this->definition['counts'] as $key => $val) {
+					$column = str_replace('.', '_', $key);
+					$value->add_property($column);
+				}
 				$value->parse_params($values);
 				$value->promise_is_loaded();
 				array_push($this->list, $value);
@@ -125,6 +149,10 @@ class PgListing {
 
 	function listing() {
 		return $this->list;
+	}
+
+	function get_class() {
+		return $this->definition['class'];
 	}
 
 	function set_class($class) {
@@ -153,7 +181,8 @@ class PgListing {
 		$query = $this->definition['query'];
 		# TODO: smarter logic to be able to handle more complex queries with preselects
 		if (!$query) {
-			$query = 'SELECT * FROM ' . $this->definition['class'] . ' ';
+			$select = 'SELECT m.*';
+			$from = ' FROM ' . $this->definition['class'] . ' m ';
 			$query_suffix = '';
 			foreach ($this->definition['filters'] as $key => $value) {
 				$condition = '=';
@@ -169,19 +198,25 @@ class PgListing {
 				$query_suffix .= ($query_suffix ? ' AND ' : ' WHERE ') . $key . ' ' . $condition . (isset($value) ? " '" . pg_escape_string($this->c['db'],$value) . "'" : '' ) . '';
 			}
 
-			$ord = false;
-			$ord2 = '';
-			foreach ($this->definition['ordering'] as $key => $value) {
-				$ord2 = ($ord2 ? $ord2 . ', ' : '') . $key . (strtolower($value) == 'desc' || $value == -1 ? ' DESC' : '');
-			}
-			if ($ord) {
-				$query .= $ord;
+			$counts = '';
+			$index = 1;
+			foreach ($this->definition['counts'] as $key => $value) {
+				$column = str_replace('.', '_', $key);
+				$select .= ", COALESCE(c$index.cnt, 0) AS $column";
+				$counts = ($counts ? $counts : ' ') . " LEFT JOIN (SELECT $value, COUNT($value) AS cnt FROM $key GROUP BY $value) c$index ON m.$value = c$index.$value";
+				$index++;
 			}
 
-			$query .= $query_suffix;
+
+			$ord = '';
+			foreach ($this->definition['ordering'] as $key => $value) {
+				$ord = ($ord ? $ord . ', ' : '') . $key . (strtolower($value) == 'desc' || $value == -1 ? ' DESC' : '');
+			}
+
+			$query = $select . $from . $counts . $query_suffix;
 		}
-		if ($ord2) {
-			$query .= ' ORDER BY ' . $ord2;
+		if ($ord) {
+			$query .= ' ORDER BY ' . $ord;
 		}
 		if (isset($this->limit)) {
 			$query .= ' LIMIT '.(isset($this->offset) ? $this->offset.', ' : '').$this->limit;

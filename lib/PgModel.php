@@ -1,21 +1,22 @@
 <?php
 
 class PgModel {
-	var $definition = array (
+	var $definition = [
 		'schema'        => '',
 		'table'         => '',
-		'columns'       => array (),
-		'keys'          => array (),
-		'autoloaders'   => array (),
+		'columns'       => [],
+		'keys'          => [],
+		'autoloaders'   => [],
 		'autoincrement' => null # TODO
-	);
-	var $values     = array ();
-	var $old_values = array ();
+	];
+	var $values     = [];
+	var $old_values = [];
+	var $properties = [];
 
-	private $loaded_classes = array ();
-	private $_loaded        = false;
-	private $_changed       = false;
-	private $c              = null;
+	protected $loaded_classes = [];
+	protected $_loaded        = false;
+	protected $_changed       = false;
+	protected $c              = null;
 
 	function __construct(&$config, $values = null) {
 		$this->c = &$config;
@@ -45,10 +46,10 @@ class PgModel {
 			}
 			return;
 		}
-		$keys_values = join('_', $this->keys_values());
+		$keys_values = join('_', $this->keys_values(false, false));
 
 		if (!array_key_exists('loaded_classes', $this->c['classes'])) {
-			$this->c['classes']['loaded_classes'] = array ();
+			$this->c['classes']['loaded_classes'] = [];
 		}
 		if (array_key_exists($this->get_class(), $this->c['classes']['loaded_classes']) && array_key_exists($keys_values, $this->c['classes']['loaded_classes'][$this->get_class()])) {
 			$this->values = $this->c['classes']['loaded_classes'][$this->get_class()][$keys_values];
@@ -61,7 +62,7 @@ class PgModel {
 		$query = "SELECT * FROM {$this->get_class()} WHERE ";
 		$vals = array();
 		foreach ($this->definition['keys'] as $key => $value) {
-			$vals[] = $key . ' = ' . $this->prepare_value($key);
+			$vals[] = $key . ' = ' . $this->prepare_value($key, false, false);
 		}
 		$query .= implode(' AND ', $vals);
 		$this->load_by_query($query, $key);
@@ -80,7 +81,7 @@ class PgModel {
 			$query = "INSERT INTO {$this->get_class()} (" . implode(', ', $this->columns()). ") VALUES (";
 			$vals = array();
 			foreach ($this->definition['columns'] as $key => $value) {
-				$vals[] = $this->prepare_value($key);
+				$vals[] = $this->prepare_value($key, false, true);
 			}
 			$query .= implode(', ', $vals);
 			$query .= ')';
@@ -88,27 +89,40 @@ class PgModel {
 			$query = "UPDATE {$this->get_class()} SET ";
 			$vals = array();
 			foreach ($this->definition['columns'] as $key => $value) {
-				$vals[] = $key . ' = ' . $this->prepare_value($key);
+				$vals[] = $key . ' = ' . $this->prepare_value($key, false, true);
 			}
 			$query .= implode(', ', $vals);
 			$query .= ' WHERE ';
 
 			$vals = array();
 			foreach ($this->definition['keys'] as $key => $value) {
-				$vals[] = $key . ' = ' . $this->prepare_value($key, true);
+				$vals[] = $key . ' = ' . $this->prepare_value($key, true, false);
 			}
 			$query .= implode(' AND ', $vals);
 		}
+		$query .= ' RETURNING *';
 		if ($res = pg_query($this->c['db'],$query)) {
-			if (join('_', $this->keys_values(true)) != join('_', $this->keys_values())) {
-				unset($this->c['classes']['loaded_classes'][$this->get_class()][join('_', $this->keys_values(true))]);
+			if ($values = pg_fetch_assoc($res)) {
+				foreach ($values as $key => $value) {
+					$key = trim($key);
+					if ($this->definition['columns'][$key]['type'] == 'bool') {
+						if ($value == 't') {
+							$value = 1;
+						} else {
+							$value = 0;
+						}
+					}
+					$this->$key($value);
+					$this->definition['columns'][$key]['saved'] = true;
+					$this->definition['columns'][$key]['loaded'] = true;
+				}
 			}
-			$this->old_values = array ();
-			foreach ($this->definition['columns'] as $key => $value) {
-				$this->definition['columns'][$key]['saved'] = true;
-				$this->definition['columns'][$key]['loaded'] = true;
+			if (join('_', $this->keys_values(true, false)) != join('_', $this->keys_values(false, false))) {
+				unset($this->c['classes']['loaded_classes'][$this->get_class()][join('_', $this->keys_values(true, false))]);
 			}
+			$this->old_values = [];
 			$this->_changed = false;
+			$this->_loaded = true;
 			foreach ($this->definition['autoloaders'] as $key => $class) {
 				if ($this->$key) {
 					$this->$key->save();
@@ -125,13 +139,13 @@ class PgModel {
 		$query = "DELETE FROM {$this->get_class()} WHERE ";
 		$vals = array();
 		foreach ($this->definition['keys'] as $key => $value) {
-			$vals[] = $key . ' = ' . $this->prepare_value($key, true);
+			$vals[] = $key . ' = ' . $this->prepare_value($key, true, false);
 		}
 		$query .= implode(' AND ', $vals);
 		if (!pg_query($this->c['db'],$query)) {
 			return false;
 		}
-		$this->loaded_classes = array ();
+		$this->loaded_classes = [];
 		$this->values = array();
 		$this->_loaded = false;
 		return true;
@@ -173,6 +187,9 @@ class PgModel {
 				$hash[$key] = $this->$key->to_hash($deep + 1);
 			}
 		}
+		foreach ($this->properties as $key => $value) {
+			$hash[$key] = $value;
+		}
 		return $hash;
 	}
 
@@ -192,13 +209,13 @@ class PgModel {
 	}
 
 	function map_data_type($type) {
-		$types = array (
+		$types = [
 			'boolean' => 'bool',
 			'integer' => 'int4',
 			'double'  => 'numeric',
 			'string'  => 'varchar',
 			'array'   => 'varchar', # TODO ?
-		);
+		];
 		if (array_key_exists($type, $types)) {
 			return $types[$type];
 		}
@@ -207,10 +224,23 @@ class PgModel {
 
 	function parse_params($params) {
 		foreach ( $this->definition['columns'] as $column => $val ) {
-			if (isset($params[$column])) {
-				$this->$column = $params[$column];
+			$value = $params[$column];
+			if (isset($value)) {
+				if ($this->definition['columns'][$column]['type'] == 'bool') {
+					if ($value == 't') {
+						$value = 1;
+					} else {
+						$value = 0;
+					}
+				}
+				$this->$column = $value;
 			} else {
-				$this->$column = '';
+				$this->$column = null;
+			}
+		}
+		foreach ( $this->properties as $key => $val ) {
+			if (array_key_exists($key, $params)) {
+				$this->properties[$key] = $params[$key];
 			}
 		}
 	}
@@ -237,14 +267,21 @@ class PgModel {
 			$params['filters'] = null;
 		}
 		$params['class'] = $this->get_class();
-		$class = $this->definition['pg_class'];
+		$class = '\\' . $this->definition['pg_class'];
 		$listing = new $class($this->c, $params);
 		return $listing;
 	}
 
+	function add_property($name) {
+		if (!array_key_exists($name, $this->properties)) {
+			$this->properties[$name] = null;
+		}
+		return true;
+	}
+
 	public function __invoke() {
 		if (func_num_args() == 1) {
-			return $this->values[func_get_arg(0)];
+			return $this->$name();
 		} else {
 			$name = func_get_arg(0);
 			$value = func_get_arg(1);
@@ -258,20 +295,22 @@ class PgModel {
 
 	public function __call($name, $arguments) {
 		if ( array_key_exists($name, $this->definition['columns']) ) {
-			if ($this->values[$name] != $arguments[0]) {
+			if ($this->values[$name] !== $arguments[0]) {
 				$this->definition['columns'][$name]['saved'] = false;
 				$this->_changed = true;
 			} else {
 				return $this->values[$name];
 			}
+		} elseif (array_key_exists($name, $this->properties)) {
+			return $this->properties[$name];
 		} else {
-			$this->definition['columns'][$name] = array (
+			$this->definition['columns'][$name] = [
 				'required'   => false,
 				'type'       => $arguments[1] ? $arguments[1] : $this->map_data_type($arguments[0]),
-				'references' => array (),
+				'references' => [],
 				'saved'      => false,
 				'loaded'     => false
-			);
+			];
 			$this->_changed = true;
 		}
 		foreach ($this->definition['columns'][$name]['references'] as $key => $value) {
@@ -291,7 +330,7 @@ class PgModel {
 				foreach ($parts as $key => $value) {
 					$parts[$key] = ucfirst($value);
 				}
-				$class_name = join('\\', $parts);
+				$class_name = '\\' . join('\\', $parts);
 				$loaded_class = new $class_name($this->c);
 				$do_not_load = false;
 				foreach ($class['keys'] as $key => $value) {
@@ -307,10 +346,15 @@ class PgModel {
 			}
 			return $this->loaded_classes[$name];
 		}
+		if (method_exists(get_called_class(), $name)) {
+			return $this->$name();
+		}
 		if ( array_key_exists($name, $this->definition['columns']) ) {
 			return $this->values[$name];
+		} elseif (array_key_exists($name, $this->properties)) {
+			return $this->properties[$name];
 		} else {
-			error_log("ERROR: unknown method/variable '$name' in class {$this->get_class()}");
+			throw new Exception("Unknown method/variable '$name' in class {$this->get_class()}");
 		}
 		return;
 	}
@@ -345,11 +389,18 @@ class PgModel {
 	protected function load_by_query($load_query) {
 		if ($res = pg_query($this->c['db'], $load_query)) {
 			if ($values = pg_fetch_assoc($res)) {
-				$this->old_values = array ();
-				$this->values = array ();
-				$this->loaded_classes = array ();
+				$this->old_values = [];
+				$this->values = [];
+				$this->loaded_classes = [];
 				foreach ($values as $key => $value) {
 					$key = trim($key);
+					if ($this->definition['columns'][$key]['type'] == 'bool') {
+						if ($value == 't') {
+							$value = 1;
+						} else {
+							$value = 0;
+						}
+					}
 					$this->$key($value);
 					$this->definition['columns'][$key]['saved'] = true;
 					$this->definition['columns'][$key]['loaded'] = true;
@@ -379,9 +430,9 @@ class PgModel {
 		return $columns;
 	}
 
-	protected function prepare_value($column, $old_value = false) {
+	protected function prepare_value($column, $old_value = false, $defaults = true) {
 		$value = null;
-		if ($this->c['classes']['autoupdate'][$column] && $this->definition['columns'][$key]['saved']) {
+		if ($this->c['classes']['autoupdate'][$column] && ($this->definition['columns'][$key]['saved'] || !$this->is_loaded())) {
 			if (is_callable($this->c['classes']['autoupdate'][$column])) {
 				return $this->c['classes']['autoupdate'][$column]();
 			}
@@ -399,7 +450,11 @@ class PgModel {
 					$value = "'".(float)$value."'";
 					break;
 				case 'bool':
-					$value = (bool)$value ? 'true' : 'false';
+					if ($value == 't' || $value == 'f') {
+						$value = "'$value'";
+					} else {
+						$value = (bool)$value ? 'true' : 'false';
+					}
 					break;
 				case 'bytea':
 					$value = pg_escape_bytea($this->c['db'], $value);
@@ -408,7 +463,7 @@ class PgModel {
 				default:
 					$value = "'".pg_escape_string($this->c['db'],(string)$value)."'";
 			}
-		} elseif (isset($this->definition['columns'][$column]['default'])) {
+		} elseif (isset($this->definition['columns'][$column]['default']) && $defaults) {
 			$value = $this->definition['columns'][$column]['default'];
 		} else {
 			$value = 'NULL';
@@ -416,10 +471,10 @@ class PgModel {
 		return $value;
 	}
 
-	protected function keys_values($old = false) {
+	protected function keys_values($old = false, $defaults = false) {
 		$values = array();
 		foreach ($this->definition['keys'] as $column => $value) {
-			array_push($values, $this->prepare_value($column, $old));
+			array_push($values, $this->prepare_value($column, $old, $default));
 		}
 		return $values;
 	}
@@ -438,22 +493,26 @@ class PgModel {
 
 	protected function init_struct() {
 		if (!$this->c) {
-			die(error_log("ERROR: config for class {$this->get_class()} not defined!"));
+			throw new Exception("Config for class {$this->get_class()} not defined!");
 		}
 		if (!$this->c['db']) {
-			die(error_log("ERROR: database connection for class {$this->get_class()} not defined!"));
+			throw new Exception("Database connection for class {$this->get_class()} not defined!");
 		}
 		if (!array_key_exists('classes', $this->c)) {
-			$this->c['classes'] = array ();
+			$this->c['classes'] = [];
 		}
 		if (!array_key_exists('definitions', $this->c['classes'])) {
-			$this->c['classes']['definitions'] = array ();
+			$this->c['classes']['definitions'] = [];
 		}
 		if (array_key_exists($this->get_class(), $this->c['classes']['definitions'])) {
 			$this->definition = $this->c['classes']['definitions'][$this->get_class()];
-			$this->values = array ();
-			$this->old_values = array ();
-			$this->loaded_classes = array ();
+			$this->values = [];
+			$this->old_values = [];
+			$this->loaded_classes = [];
+			foreach ($this->definition['columns'] as $name => $val) {
+				$this->values[$name] = null;
+				$this->old_values[$name] = null;
+			}
 			return true;
 		}
 
@@ -469,15 +528,16 @@ class PgModel {
 			ORDER BY c.ordinal_position
 		";
 		if ( ($res = pg_query($this->c['db'], $query)) && pg_num_rows($res) ) {
-			$this->definition['columns'] = array ();
-			$this->definition['keys'] = array ();
-			$this->definition['autoloaders'] = array ();
-			$this->values = array ();
-			$this->old_values = array ();
-			$this->loaded_classes = array ();
+			$this->definition['columns'] = [];
+			$this->definition['keys'] = [];
+			$this->definition['autoloaders'] = [];
+			$this->values = [];
+			$this->old_values = [];
+			$this->loaded_classes = [];
 
 			while ($row = pg_fetch_assoc($res)) {
-				$this->definition['columns'][trim($row['column_name'])] = array (
+				$name = trim($row['column_name']);
+				$this->definition['columns'][$name] = [
 					'required'   => !$row['is_nullable'],
 					'type'       => $row['udt_name'],
 					'length'     => $row['character_maximum_length'],
@@ -485,13 +545,15 @@ class PgModel {
 					'position'   => $row['ordinal_position'],
 					'unique'     => $row['is_unique'],
 					'primary'    => $row['is_primary'],
-					'references' => array (),
+					'references' => [],
 					'saved'      => false,
 					'loaded'     => false
-				);
+				];
+				$this->values[$name] = null;
+				$this->old_values[$name] = null;
 				$this->_changed = true;
 				if ($row['is_primary']) {
-					$this->definition['keys'][trim($row['column_name'])] = null;
+					$this->definition['keys'][$name] = null;
 				}
 			}
 
@@ -511,10 +573,10 @@ class PgModel {
 						if ($this->c['classes']['autoloaders'][$foreign[1]]['exclude'] && array_search($this->get_class(), $this->c['classes']['autoloaders'][$foreign[1]]['exclude']) !== false) {
 							continue;
 						} else {
-							$this->definition['autoloaders'][$autoloader] = array (
+							$this->definition['autoloaders'][$autoloader] = [
 								'class' => $foreign[2],
-								'keys'  => array ()
-							);
+								'keys'  => []
+							];
 							$src_keys = explode(',', $foreign[1]);
 							$dst_keys = explode(',', $foreign[3]);
 							foreach ($src_keys as $key => $value) {
@@ -535,7 +597,7 @@ class PgModel {
 			$this->c['classes']['definitions'][$this->get_class()] = $this->definition;
 			return true;
 		} else {
-			error_log("ERROR: unable to init class {$this->get_class()}!");
+			throw new Exception("Unable to init class {$this->get_class()}!");
 		}
 		return false;
 	}
