@@ -7,7 +7,7 @@ https://github.com/fra-iesus/pg_model
 Let's have two db tables:
 ```
 schema.users_table
-id          | int       | primary key
+id_user     | int       | primary key
 name        | varchar
 created     | timestamp
 modified_by | int
@@ -16,7 +16,7 @@ reference   | int       | foreign key schema.some_table (id)
 
 schema.some_table
 id          | int       | primary key
-modified_by | int       | foreign key schema.users_table (id)
+modified_by | int       | foreign key schema.users_table (id_user)
 modified    | timestamp
 value       | varchar
 ```
@@ -36,7 +36,7 @@ $config = array (
 			'modified_by' => array (
 				'class' => 'schema.users_table',
 				'keys' => array (
-					'id' => 'modified_by'
+					'id_user' => 'modified_by'
 				),
 				'exclude' => array (
 					# do not autoload here to avoid circular reference
@@ -50,20 +50,20 @@ $config = array (
 		'autoupdate' => array (
 			'modified' => 'NOW()',
 			'modified_by'  => function () use (&$USER) {
-				return "'" . $USER->id . "'";
+				return "'" . $USER->id_user . "'";
 			}
 		)
 	)
 );
 
 # load a row from the database
-$USER = new Schema\Users_Table($config, array( 'id' => 1 ));
+$USER = new Schema\Users_Table($config, array( 'id_user' => 1 ));
 print_r($USER->to_hash());
 ```
 Output will look like:
 ```
 Array (
-      [id] => 1
+      [id_user] => 1
       [name] => some username
       [created] => 2001-01-01 00:00:00+01
       [modified_by] => 1
@@ -92,7 +92,7 @@ $some_table_row = new Schema\Some_Table($config)->get_list( array ('limit' => 1)
 $autoloaded_class = $some_table_row->autoload('modified_by');
 # at this point that autoloaded class is also accessible via $some_table_row->schema_users_table_modified_by
 
-# filters = search query
+# filters = search query, ordering and counts on other tables
 $list = new Schema\Users_Table\Listing($config, [
 	'limit' => 1,
 	'filters' => [
@@ -101,7 +101,11 @@ $list = new Schema\Users_Table\Listing($config, [
 			'condition' => 'ilike',
 			'value' => 'T%'
 		]
-	]
+	],
+	'ordering' => [
+		'name' => 'asc', # 'asc', 'desc' / 1, -1
+	],
+	'counts' => [ 'schema.some_other_table' => 'id_user' ],
 ] );
 
 ```
