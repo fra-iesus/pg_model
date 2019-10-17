@@ -2,6 +2,7 @@
 
 class PgModel {
 	var $definition = [
+		'pg_class'      => '',
 		'schema'        => '',
 		'table'         => '',
 		'columns'       => [],
@@ -22,6 +23,7 @@ class PgModel {
 		$this->c = &$config;
 
 		$class = get_called_class();
+		$this->definition['pg_class'] = $class;
 		$table_name = str_replace('\\', '.', $class);
 
 		$this->set_class($table_name);
