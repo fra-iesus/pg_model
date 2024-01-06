@@ -39,25 +39,31 @@ class PgListing {
 		$this->c = &$config;
 
 
-		if ($params['offset']) {
+		if (array_key_exists('offset', $params) && $params['offset']) {
 			$this->offset = $params['offset'];
 		}
-		if ($params['limit']) {
+		if (array_key_exists('limit', $params) && $params['limit']) {
 			$this->limit  = $params['limit'];
 		}
-		if ($params['current']) {
+		if (array_key_exists('current', $params) && $params['current']) {
 			$this->current['keys'] = $params['current'];
 		}
-		if ($params['filters']) {
+		if (array_key_exists('filters', $params) && $params['filters']) {
 			$this->filter($params['filters']);
 		}
-		if ($params['ordering']) {
+		if (array_key_exists('ordering', $params) && $params['ordering']) {
 			$this->order_by($params['ordering']);
 		}
-		if ($params['counts']) {
+		if (array_key_exists('counts', $params) && $params['counts']) {
 			$this->set_counts($params['counts']);
 		}
-		if ( ($this->definition['query'] || $this->definition['class']) && ($this->definition['autoload']) ) {
+		if (array_key_exists('query', $params) && $params['query']) {
+			$this->definition['query'] = $params['query'];
+		}
+		if ( (
+				(array_key_exists('query', $this->definition) && $this->definition['query']) || 
+				(array_key_exists('class', $this->definition) && $this->definition['class'])
+			) && (array_key_exists('autoload', $this->definition) && $this->definition['autoload']) ) {
 			$this->load();
 		}
 
@@ -129,8 +135,8 @@ class PgListing {
 				$class = '\\' . $this->definition['pg_class'];
 			}
 			while ($values = pg_fetch_assoc($res)) {
-				if (is_array($this->current['keys']) && !sizeof(array_diff($values, $this->current['keys']))) {
-					$this->current['index'] = sizeof($this->list);
+				if (is_array($this->current['keys']) && !count(array_diff($values, $this->current['keys']))) {
+					$this->current['index'] = count($this->list);
 				}
 				$value = new $class($this->c);
 				foreach ($this->definition['counts'] as $key => $val) {
@@ -192,10 +198,13 @@ class PgListing {
 					}
 					$value = $value['value'];
 				}
-				if (!isset($value)) {
-					$condition = 'IS NULL';
-				}
-				$query_suffix .= ($query_suffix ? ' AND ' : ' WHERE ') . $key . ' ' . $condition . (isset($value) ? " '" . pg_escape_string($this->c['db'],$value) . "'" : '' ) . '';
+				$query_suffix .= ($query_suffix ? ' AND ' : ' WHERE ') . $key . ' ' . $condition . (
+					isset($value) ? (
+						is_bool($value) ? (
+							$value ? 'true' : 'false'
+						) : " '" . pg_escape_string($this->c['db'],$value) . "'"
+					) : '' 
+				) . '';
 			}
 
 			$counts = '';
@@ -207,13 +216,11 @@ class PgListing {
 				$index++;
 			}
 
-
-			$ord = '';
-			foreach ($this->definition['ordering'] as $key => $value) {
-				$ord = ($ord ? $ord . ', ' : '') . $key . (strtolower($value) == 'desc' || $value == -1 ? ' DESC' : '');
-			}
-
 			$query = $select . $from . $counts . $query_suffix;
+		}
+		$ord = '';
+		foreach ($this->definition['ordering'] as $key => $value) {
+			$ord = ($ord ? $ord . ', ' : '') . $key . (strtolower($value) == 'desc' || $value == -1 ? ' DESC' : '');
 		}
 		if ($ord) {
 			$query .= ' ORDER BY ' . $ord;
