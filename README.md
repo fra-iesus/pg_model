@@ -112,4 +112,4 @@ $list = new Schema\Users_Table\Listing($config, [
 
 # TODO:
 - add column value validation based on its definition
-- method for search and recursive removal of references to allow row deletion in case of foreign keys
+- method for search and recursive removal of references to allow row deletion in case of foreign keys (quite dangerous, isn't it? the proper behaviour shall be defined for every single foreign key: eg. remove the reference setting that column to null or really remove the reference)
