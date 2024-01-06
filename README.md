@@ -25,39 +25,39 @@ value       | varchar
 require_once('./lib/pg_model.php');
 $db_conn = pg_connect('host=localhost port=5432 dbname=some_db user=me ...');
 
-$config = array (
+$config = [
 	# mandatory - db connection
 	'db' => &$db_conn,
 	# optional advanced options for classes
-	'classes' => array (
+	'classes' => [
 		# explicitly defined autoloaders not using foreign keys
 		# (for some reason like circular referencies or so)
-		'autoloaders'  => array (
-			'modified_by' => array (
+		'autoloaders'  => [
+			'modified_by' => [
 				'class' => 'schema.users_table',
-				'keys' => array (
+				'keys' => [
 					'id_user' => 'modified_by'
-				),
-				'exclude' => array (
+				],
+				'exclude' => [
 					# do not autoload here to avoid circular reference
 					'schema.some_table'
-				)
-			)
-		),
+				]
+			]
+		],
 		# values which should be set while saving the row to the database
 		# unless they were explicitly updated
 		# (scalar value or function could be used)
-		'autoupdate' => array (
+		'autoupdate' => [
 			'modified' => 'NOW()',
 			'modified_by'  => function () use (&$USER) {
 				return "'" . $USER->id_user . "'";
 			}
-		)
-	)
-);
+		]
+	]
+];
 
 # load a row from the database
-$USER = new Schema\Users_Table($config, array( 'id_user' => 1 ));
+$USER = new Schema\Users_Table($config, [ 'id_user' => 1 ]);
 print_r($USER->to_hash());
 ```
 Output will look like:
@@ -88,7 +88,7 @@ $USER('name', 'New Name');
 $USER->save();
 
 # explicitly autoload class excluded from implicit autoloading
-$some_table_row = new Schema\Some_Table($config)->get_list( array ('limit' => 1) )->list[0];
+$some_table_row = new Schema\Some_Table($config)->get_list( ['limit' => 1] )->list[0];
 $autoloaded_class = $some_table_row->autoload('modified_by');
 # at this point that autoloaded class is also accessible via $some_table_row->schema_users_table_modified_by
 
