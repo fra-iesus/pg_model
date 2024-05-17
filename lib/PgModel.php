@@ -1,5 +1,4 @@
 <?php
-
 class PgModel {
 	var $definition = [
 		'pg_class'      => '',
@@ -16,6 +15,7 @@ class PgModel {
 
 	protected $loaded_classes = [];
 	protected $_loaded        = false;
+	protected $_deleted       = false;
 	protected $_changed       = false;
 	protected $c              = null;
 
@@ -48,7 +48,7 @@ class PgModel {
 			}
 			return;
 		}
-		$keys_values = join('_', $this->keys_values(false, false));
+		$keys_values = $this->keys_values(true, false, false);
 
 		if (!array_key_exists('loaded_classes', $this->c['classes'])) {
 			$this->c['classes']['loaded_classes'] = [];
@@ -62,11 +62,11 @@ class PgModel {
 		$this->_loaded = false;
 
 		$query = "SELECT * FROM {$this->get_class()} WHERE ";
-		$vals = array();
+		$keys = [];
 		foreach ($this->definition['keys'] as $key => $value) {
-			$vals[] = $key . ' = ' . $this->prepare_value($key, false, false);
+			$keys[] = $key . ' = ' . $this->prepare_value($key, false, false);
 		}
-		$query .= implode(' AND ', $vals);
+		$query .= implode(' AND ', $keys);
 		$this->load_by_query($query);
 
 		$this->c['classes']['loaded_classes'][$this->get_class()][$keys_values] = $this->values;
@@ -74,14 +74,14 @@ class PgModel {
 		return $this->_loaded;
 	}
 
-	function save() {
-		$params = $this->all_values();
+	function save($skip_audit = false) {
 		if (!$this->_changed) {
 			return true;
 		}
+
 		if (!$this->_loaded) {
 			$query = "INSERT INTO {$this->get_class()} (" . implode(', ', $this->columns()). ") VALUES (";
-			$vals = array();
+			$vals = [];
 			foreach ($this->definition['columns'] as $column => $value) {
 				$vals[] = $this->prepare_value($column, false, true);
 			}
@@ -89,39 +89,69 @@ class PgModel {
 			$query .= ')';
 		} else {
 			$query = "UPDATE {$this->get_class()} SET ";
-			$vals = array();
+			$vals = [];
 			foreach ($this->definition['columns'] as $column => $value) {
 				$vals[] = $column . ' = ' . $this->prepare_value($column, false, true);
 			}
 			$query .= implode(', ', $vals);
 			$query .= ' WHERE ';
 
-			$vals = array();
+			$keys = [];
 			foreach ($this->definition['keys'] as $key => $value) {
-				$vals[] = $key . ' = ' . $this->prepare_value($key, true, false);
+				$keys[] = $key . ' = ' . $this->prepare_value($key, true, false);
 			}
-			$query .= implode(' AND ', $vals);
+			$query .= implode(' AND ', $keys);
 		}
 		$query .= ' RETURNING *';
+		if (
+			!$skip_audit &&
+			array_key_exists('classes', $this->c) &&
+			array_key_exists('audit_log', $this->c['classes'])
+		) {
+			$changed_columns = $this->changed_columns(true);
+		}
 		if ($res = pg_query($this->c['db'],$query)) {
 			if ($values = pg_fetch_assoc($res)) {
 				foreach ($values as $column => $value) {
 					$column = trim($column);
-					if ($this->definition['columns'][$column]['type'] == 'bool') {
-						if ($value == 't') {
-							$value = 1;
-						} else {
-							$value = 0;
+					if (isset($value)) {
+						$value = $this->transform_load($column, $value);
+						switch ($this->definition['columns'][$column]['type']) {
+							case 'bool':
+								$value = ($value == 't' ? 1 : 0);
+								break;
+							case 'json':
+							case 'jsonb':
+								$value = json_decode($value, true);
+								break;
+							default:
 						}
+						$this->$column = $value;
+					} else {
+						$this->$column = null;
 					}
-					$this->$column($value);
 					$this->definition['columns'][$column]['saved'] = true;
 					$this->definition['columns'][$column]['loaded'] = true;
 				}
 			}
-			if (join('_', $this->keys_values(true, false)) != join('_', $this->keys_values(false, false))) {
-				unset($this->c['classes']['loaded_classes'][$this->get_class()][join('_', $this->keys_values(true, false))]);
+			if (
+				!$skip_audit &&
+				array_key_exists('classes', $this->c) &&
+				array_key_exists('audit_log', $this->c['classes'])
+			) {
+				$audit_data = [
+					$this->c['classes']['audit_log']['columns']['table'] => $this->get_class(),
+					$this->c['classes']['audit_log']['columns']['index'] => $this->keys_values(true, false, false, true),
+					$this->c['classes']['audit_log']['columns']['data']  => $changed_columns,
+				];
+				$audit_log_class = $this->c['classes']['audit_log']['class'];
+				$audit_log = new $audit_log_class($this->c, $audit_data);
+				$audit_log->save(true);
+			}
+			if ($this->keys_values(true, true, false) != $this->keys_values(true, false, false)) {
+				unset($this->c['classes']['loaded_classes'][$this->get_class()][$this->keys_values(true, true, false)]);
 				# update in loaded classes ?
+				$keys_values = $this->keys_values(true, false, false);
 				$this->c['classes']['loaded_classes'][$this->get_class()][$keys_values] = $this->values;
 			}
 			$this->old_values = [];
@@ -139,12 +169,12 @@ class PgModel {
 		return $res;
 	}
 
-	function delete() {
+	function delete($skip_audit = false) {
 		if (!$this->_loaded) {
 			return false;
 		}
 		$query = "DELETE FROM {$this->get_class()} WHERE ";
-		$vals = array();
+		$vals = [];
 		foreach ($this->definition['keys'] as $key => $value) {
 			$vals[] = $key . ' = ' . $this->prepare_value($key, true, false);
 		}
@@ -152,17 +182,32 @@ class PgModel {
 		if (!pg_query($this->c['db'],$query)) {
 			return false;
 		}
+		if (
+			!$skip_audit &&
+			array_key_exists('classes', $this->c) &&
+			array_key_exists('audit_log', $this->c['classes'])
+		) {
+			$audit_data = [
+				$this->c['classes']['audit_log']['columns']['table'] => $this->get_class(),
+				$this->c['classes']['audit_log']['columns']['index'] => $this->keys_values(true, false, false, true),
+				$this->c['classes']['audit_log']['columns']['data']  => 'entity removed',
+			];
+			$audit_log_class = $this->c['classes']['audit_log']['class'];
+			$audit_log = new $audit_log_class($this->c, $audit_data);
+			$audit_log->save(true);
+		}
 		$this->loaded_classes = [];
-		$this->values = array();
+		$this->values = [];
 		$this->_loaded = false;
+		$this->_deleted = true;
 		return true;
 	}
 
-	function changed_columns() {
-		$changed = array();
+	function changed_columns($new_values = false) {
+		$changed = [];
 		foreach ($this->definition['columns'] as $column => $value) {
 			if (!$this->definition['columns'][$column]['saved']) {
-				$changed[$column] = $this->old_values[$column];
+				$changed[$column] = $new_values ? $this->$column : $this->old_values[$column];
 			}
 		}
 		return $changed;
@@ -174,24 +219,32 @@ class PgModel {
 
 	function parse_all($params) {
 		foreach ($params as $column => $value) {
-			if (!is_array($value)) {
-				$this->$column($value);
-			}
+			$this->$column($value);
 		}
 		return $this;
 	}
 
-	function to_hash($deep = 0) {
+	function to_hash($autoloaders = true, $deep = 0) {
 		if ($deep > 16) {
 			return;
 		}
-		$hash = array();
-		foreach ($this->definition['columns'] as $columns => $value) {
-			$hash[$columns] = $this->values[$columns];
+		$hash = [];
+		foreach ($this->definition['columns'] as $column => $val) {
+			$value = $this->values[$column];
+			switch ($this->definition['columns'][$column]['type']) {
+				case 'json':
+				case 'jsonb':
+					$value = json_encode($value, JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT);
+					break;
+				default:
+			}
+			$hash[$column] = $value;
 		}
-		foreach ($this->definition['autoloaders'] as $autoloader => $class) {
-			if ($this->$autoloader) {
-				$hash[$autoloader] = $this->$autoloader->to_hash($deep + 1);
+		if ($autoloaders) {
+			foreach ($this->definition['autoloaders'] as $autoloader => $class) {
+				if ($this->$autoloader) {
+					$hash[$autoloader] = $this->$autoloader->to_hash($autoloaders, $deep + 1);
+				}
 			}
 		}
 		foreach ($this->properties as $property => $value) {
@@ -217,13 +270,14 @@ class PgModel {
 
 	function map_data_type($type) {
 		$types = [
-			'boolean' => 'bool',
-			'integer' => 'int8',
-			'double'  => 'numeric',
-			'string'  => 'varchar',
-			'array'   => 'varchar', # TODO ?
-			'json'    => 'json',
-			'jsonb'   => 'jsonb',
+			'boolean'   => 'bool',
+			'integer'   => 'int8',
+			'double'    => 'numeric',
+			'string'    => 'varchar',
+			'array'     => 'varchar', # TODO ?
+			'json'      => 'json',
+			'jsonb'     => 'jsonb',
+			'timestamp' => 'timestamptz',
 		];
 		if (array_key_exists($type, $types)) {
 			return $types[$type];
@@ -231,10 +285,13 @@ class PgModel {
 		return 'varchar';
 	}
 
-	function parse_params($params) {
+	function parse_params($params, $autotransform = false) {
 		foreach ( $this->definition['columns'] as $column => $val ) {
 			if (array_key_exists($column, $params)) {
 				$value = $params[$column];
+				if ($autotransform) {
+					$value = $this->transform_load($column, $value);
+				}
 				if (isset($value)) {
 					switch ($this->definition['columns'][$column]['type']) {
 						case 'bool':
@@ -242,14 +299,14 @@ class PgModel {
 							break;
 						case 'json':
 						case 'jsonb':
-							$value = json_decode($value, true);
+							if (is_string($value)) {
+								$value = json_decode($value, true);
+							}
 							break;
 						default:
 					}
-					$this->$column = $value;
-				} else {
-					$this->$column = null;
 				}
+				$this->$column = $value;
 			} else {
 				$this->$column = null;
 			}
@@ -257,6 +314,8 @@ class PgModel {
 		foreach ( $this->properties as $property => $val ) {
 			if (array_key_exists($property, $params)) {
 				$this->properties[$property] = $params[$property];
+			} else {
+				$this->properties[$property] = null;
 			}
 		}
 	}
@@ -296,7 +355,12 @@ class PgModel {
 	}
 
 	public function __invoke() {
+		if ($this->_deleted) {
+			throw new Exception("This record was already removed - trying to invoke class {$this->get_class()} with param(s) ['" .
+				implode("'], ['", func_get_args()) . "']");
+		}
 		if (func_num_args() == 1) {
+			$name = func_get_arg(0);
 			return $this->$name();
 		} else {
 			$name = func_get_arg(0);
@@ -306,10 +370,16 @@ class PgModel {
 	}
 
 	public function __set($name, $value) {
+		if ($this->_deleted) {
+			throw new Exception("This record was already removed - trying to set '$name' of class {$this->get_class()}");
+		}
 		$this->$name($value);
 	}
 
 	public function __call($name, $arguments) {
+		if ($this->_deleted) {
+			throw new Exception("This record was already removed - trying to call '$name' of class {$this->get_class()}");
+		}
 		if ( array_key_exists($name, $this->definition['columns']) ) {
 			if (!array_key_exists($name, $this->values) || $this->values[$name] !== $arguments[0]) {
 				if (array_key_exists($name, $this->values)) {
@@ -318,20 +388,27 @@ class PgModel {
 				$this->values[$name] = $arguments[0];
 				$this->definition['columns'][$name]['saved'] = false;
 				$this->_changed = true;
-			} else {
-				return $this->values[$name];
 			}
+			return $this->values[$name];
 		} elseif (array_key_exists($name, $this->properties)) {
+			if (sizeof($arguments)) {
+				$this->properties[$name] = $arguments[0];
+			}
 			return $this->properties[$name];
 		} else {
-			$this->definition['columns'][$name] = [
-				'required'   => false,
-				'type'       => $arguments[1] ? $arguments[1] : $this->map_data_type($arguments[0]),
-				'references' => [],
-				'saved'      => false,
-				'loaded'     => false
-			];
-			$this->_changed = true;
+			if (count($arguments)) {
+				$this->definition['columns'][$name] = [
+					'required'   => false,
+					'type'       => ( count($arguments) > 1 && $arguments[1] ) ? $arguments[1] : $this->map_data_type($arguments[0]),
+					'references' => [],
+					'saved'      => false,
+					'loaded'     => false
+				];
+				$this->_changed = true;
+			} else {
+				# unknown method was called
+				throw new Exception("Unknown method/variable '$name' in class {$this->get_class()}");
+			}
 		}
 		foreach ($this->definition['columns'][$name]['references'] as $reference => $value) {
 	 		unset($this->loaded_classes[$value]);
@@ -342,6 +419,9 @@ class PgModel {
 	}
 
 	public function __get($name) {
+		if ($this->_deleted) {
+			throw new Exception("This record was already removed - trying to get '$name' of class {$this->get_class()}");
+		}
 		if ( array_key_exists($name, $this->definition['autoloaders']) ) {
 			if (!array_key_exists($name, $this->loaded_classes)) {
 				$class = $this->definition['autoloaders'][$name];
@@ -370,7 +450,14 @@ class PgModel {
 			return $this->$name();
 		}
 		if ( array_key_exists($name, $this->definition['columns']) ) {
-			return $this->values[$name];
+			if (array_key_exists($name, $this->values)) {
+				return $this->values[$name];
+			} else {
+				print_r($this);
+				$e = new \Exception;
+				var_dump($e->getTraceAsString());
+				die();
+			}
 		} elseif (array_key_exists($name, $this->properties)) {
 			return $this->properties[$name];
 		} else {
@@ -406,6 +493,35 @@ class PgModel {
 		return $this;
 	}
 
+	protected function transform_load($column, $value) {
+		if (
+			isset($value) &&
+			array_key_exists('classes', $this->c) &&
+			array_key_exists('autotransform', $this->c['classes']) &&
+			array_key_exists($column, $this->c['classes']['autotransform']) &&
+			is_array($this->c['classes']['autotransform'][$column]) &&
+			array_key_exists('load', $this->c['classes']['autotransform'][$column]) &&
+			is_callable($this->c['classes']['autotransform'][$column]['load'])
+		) {
+			$value = $this->c['classes']['autotransform'][$column]['load']($value);
+		}
+		return $value;
+	}
+	protected function transform_save($column, $value) {
+		if (
+			isset($value) &&
+			array_key_exists('classes', $this->c) &&
+			array_key_exists('autotransform', $this->c['classes']) &&
+			array_key_exists($column, $this->c['classes']['autotransform']) &&
+			is_array($this->c['classes']['autotransform'][$column]) &&
+			array_key_exists('save', $this->c['classes']['autotransform'][$column]) &&
+			is_callable($this->c['classes']['autotransform'][$column]['save'])
+		) {
+			$value = $this->c['classes']['autotransform'][$column]['save']($value);
+		}
+		return $value;
+	}
+
 	protected function load_by_query($load_query) {
 		if ($res = pg_query($this->c['db'], $load_query)) {
 			if ($values = pg_fetch_assoc($res)) {
@@ -414,6 +530,8 @@ class PgModel {
 				$this->loaded_classes = [];
 				foreach ($values as $column => $value) {
 					$column = trim($column);
+					$value = $this->transform_load($column, $value);
+
 					switch ($this->definition['columns'][$column]['type']) {
 						case 'bool':
 							$value = ($value == 't' ? 1 : 0);
@@ -446,7 +564,7 @@ class PgModel {
 	}
 
 	protected function columns() {
-		$columns = array();
+		$columns = [];
 		foreach ( $this->definition['columns'] as $column => $value ) {
 			array_push($columns, $column);
 		}
@@ -456,47 +574,63 @@ class PgModel {
 	protected function prepare_value($column, $old_value = false, $defaults = true) {
 		$value = null;
 		if (
-				array_key_exists('classes', $this->c) &&
-				array_key_exists('autoupdate', $this->c['classes']) &&
-				array_key_exists($column, $this->c['classes']['autoupdate']) &&
-				$this->c['classes']['autoupdate'][$column] &&
-				( $this->definition['columns'][$column]['saved'] || !$this->is_loaded())
+			array_key_exists('classes', $this->c) &&
+			array_key_exists('autoupdate', $this->c['classes']) &&
+			array_key_exists($column, $this->c['classes']['autoupdate']) &&
+			$this->c['classes']['autoupdate'][$column] &&
+			( $this->definition['columns'][$column]['saved'] || !$this->is_loaded())
 		) {
 			if (is_callable($this->c['classes']['autoupdate'][$column])) {
-				return $this->c['classes']['autoupdate'][$column]();
+				return $this->c['classes']['autoupdate'][$column]($this->values[$column]);
 			}
 			return $this->c['classes']['autoupdate'][$column];
 		}
 		if (null !== ($old_value && (array_key_exists($column, $this->definition['columns']) && !$this->definition['columns'][$column]['saved']) ? $this->old_values[$column] : $this->values[$column])) {
 			$value = $old_value && (array_key_exists($column, $this->definition['columns']) && !$this->definition['columns'][$column]['saved']) ? $this->old_values[$column] : $this->values[$column];
-			switch ($this->definition['columns'][$column]['type']) {
-				case 'int2':
-				case 'int4':
-				case 'int8':
-					$value = isset($value) ? "'".(int)$value."'" : 'NULL';
-					break;
-				case 'numeric':
-					$value = isset($value) ? "'".(int)$value."'" : 'NULL';
-					break;
-				case 'bool':
-					if ($value == 't' || $value == 'f') {
-						$value = "'$value'";
-					} elseif (isset($value)) {
-						$value = (bool)$value ? 'true' : 'false';
-					} else {
-						$value = 'NULL';
-					}
-					break;
-				case 'bytea':
-					$value = isset($value) ? pg_escape_bytea($this->c['db'], $value) : 'NULL';
-					break;
-				case 'json':
-				case 'jsonb':
-					$value = isset($value) ? "'" . pg_escape_string($this->c['db'], json_encode($value)) . "'" : 'NULL';
-					break;
-				# timestamptz, text, varchar
-				default:
-					$value = isset($value) ? "'".pg_escape_string($this->c['db'],(string)$value)."'" : 'NULL';
+
+			$pattern1 = '/^' . preg_quote($column, '/') . '\s*([&+*\/\-|#~<>])\s*([\d.]+)/';
+			$pattern2 = '/^([\d.]+)\s*([&+*\/\-|#~<>])\s*' . preg_quote($column, '/') . '$/';
+			if (is_string($value) && (preg_match($pattern1, $value) || preg_match($pattern2, $value)) ) {
+				# do nothing - it's a relative update like "col = col & 1" or "col = 1 + col"
+			} else {
+				$value = $this->transform_save($column, $value);
+				switch ($this->definition['columns'][$column]['type']) {
+					case 'int2':
+					case 'int4':
+					case 'int8':
+						$value = isset($value) ? "'".(int)$value."'" : 'NULL';
+						break;
+					case 'numeric':
+						$value = isset($value) ? "'".(int)$value."'" : 'NULL';
+						break;
+					case 'bool':
+						if ($value == 't' || $value == 'f') {
+							$value = "'$value'";
+						} elseif (isset($value)) {
+							$value = (bool)$value ? 'true' : 'false';
+						} else {
+							$value = 'NULL';
+						}
+						break;
+					case 'bytea':
+						$value = isset($value) ? pg_escape_bytea($this->c['db'], $value) : 'NULL';
+						break;
+					case 'json':
+					case 'jsonb':
+						$value = isset($value) ? "'" . pg_escape_string($this->c['db'], is_array($value) ? json_encode($value, JSON_UNESCAPED_SLASHES) : $value) . "'" : 'NULL';
+						break;
+					case 'timestamptz':
+						if (isset($value)) {
+							if ( trim(strtoupper($value)) != 'NOW()' ) {
+								$value = "'".pg_escape_string($this->c['db'],(string)$value)."'";
+							}
+						} else {
+							$value = 'NULL';
+						}
+					# text, varchar
+					default:
+						$value = isset($value) ? "'".pg_escape_string($this->c['db'],(string)$value)."'" : 'NULL';
+				}
 			}
 		} elseif (isset($this->definition['columns'][$column]['default']) && $defaults) {
 			$value = $this->definition['columns'][$column]['default'];
@@ -506,16 +640,18 @@ class PgModel {
 		return $value;
 	}
 
-	protected function keys_values($old = false, $defaults = false) {
-		$values = array();
+	protected function keys_values($joined = false, $old = false, $defaults = false, $raw = false) {
+		$values = [];
+		$keys = $this->definition['keys'];
+		ksort($keys);
 		foreach ($this->definition['keys'] as $key => $value) {
-			array_push($values, $this->prepare_value($key, $old, $defaults));
+			array_push($values, $raw ? $this->$key : $this->prepare_value($key, $old, $defaults));
 		}
-		return $values;
+		return $joined ? join('_', $values) : $values;
 	}
 
 	protected function all_values() {
-		$values = array();
+		$values = [];
 		foreach ($this->columns() as $column) {
 			if (!isset($this->values[$column]) && $this->definition['columns'][$column]['required']) {
 				# die("Missing required value for column $column in table ".$this->definition['table']);
@@ -647,5 +783,4 @@ class PgModel {
 	}
 
 }
-
 ?>
