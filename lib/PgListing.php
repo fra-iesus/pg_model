@@ -60,6 +60,9 @@ class PgListing {
 		if (array_key_exists('query', $params) && $params['query']) {
 			$this->definition['query'] = $params['query'];
 		}
+		if (array_key_exists('class', $params) && $params['class']) {
+			$this->set_class($params['class']);
+		}
 		if ( (
 				(array_key_exists('query', $this->definition) && $this->definition['query']) || 
 				(array_key_exists('class', $this->definition) && $this->definition['class'])
@@ -143,7 +146,7 @@ class PgListing {
 					$column = str_replace('.', '_', $key);
 					$value->add_property($column);
 				}
-				$value->parse_params($values);
+				$value->parse_params($values, true);
 				$value->promise_is_loaded();
 				array_push($this->list, $value);
 				$this->_count++;
@@ -166,10 +169,10 @@ class PgListing {
 		return $this;
 	}
 
-	function to_hash() {
+	function to_hash($autoloaders = true) {
 		$hash = array();
 		foreach ($this->list as $key => $value) {
-			$hash[] = $value->to_hash();
+			$hash[] = $value->to_hash($autoloaders);
 		}
 		return $hash;
 	}
@@ -196,7 +199,11 @@ class PgListing {
 					if (array_key_exists('condition', $value)) {
 						$condition = $value['condition'];
 					}
-					$value = $value['value'];
+					if (array_key_exists('value', $value)) {
+						$value = $value['value'];
+					} else {
+						$value = null;
+					}
 				}
 				$query_suffix .= ($query_suffix ? ' AND ' : ' WHERE ') . $key . ' ' . $condition . (
 					isset($value) ? (
@@ -232,5 +239,4 @@ class PgListing {
 		return $query;
 	}
 }
-
 ?>
